@@ -9,16 +9,20 @@ export default function App() {
   const [db, setDb] = useState(null);
   const [error, setError] = useState(null);
 
-  useEffect(async () => {
+  useEffect(async () => {    
     // sql.js needs to fetch its wasm file, so we cannot immediately instantiate the database
     // without any configuration, initSqlJs will fetch the wasm files directly from the same path as the js
     // see ../craco.config.js
-    try {
-      const SQL = await initSqlJs({ locateFile: () => sqlWasm });
-      setDb(new SQL.Database());
-    } catch (err) {
-      setError(err);
-    }
+    const wasmFileLocation = () => sqlWasm;
+    const SQL = await initSqlJs({ locateFile: wasmFileLocation });
+
+    // Load .db file
+    const response = await fetch('./Chinook_Sqlite_rev.sqlite');
+    const buffer = await response.arrayBuffer();
+    const dbInstance = new SQL.Database(new Uint8Array(buffer));
+    
+    // Set the database instance to state
+    setDb(dbInstance);
   }, []);
 
   if (error) return <pre>{error.toString()}</pre>;
