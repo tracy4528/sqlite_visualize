@@ -1,0 +1,14 @@
+{
+  "files": {
+    "main.css": "/sqlite_visualize/static/css/main.edb9e717.css",
+    "main.js": "/sqlite_visualize/static/js/main.60e4aab3.js",
+    "sql-wasm.wasm": "/sqlite_visualize/sql-wasm-2b277767061e6a2529fe1f2e6fe80b4a.wasm",
+    "index.html": "/sqlite_visualize/index.html",
+    "main.edb9e717.css.map": "/sqlite_visualize/static/css/main.edb9e717.css.map",
+    "main.60e4aab3.js.map": "/sqlite_visualize/static/js/main.60e4aab3.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.edb9e717.css",
+    "static/js/main.60e4aab3.js"
+  ]
+}
