@@ -1,11 +1,12 @@
 {
-  "name": "react-sqljs-demo",
+  "name": "sqlite_vis",
   "version": "1.0.0",
   "description": "sql.js + react example starter project",
   "keywords": [
     "react",
     "starter"
   ],
+  "homepage": "https://tracy4528.github.io/sqlite_visualize",
   "main": "src/index.js",
   "license": "MIT",
   "dependencies": {
@@ -22,6 +23,7 @@
   },
   "devDependencies": {
     "@craco/craco": "^5.9.0",
+    "gh-pages": "^6.1.1",
     "react-scripts": "^5.0.1",
     "typescript": "^4.5.5"
   },
@@ -29,7 +31,9 @@
     "start": "craco start",
     "build": "craco build",
     "test": "craco test --env=jsdom",
-    "eject": "craco eject"
+    "eject": "craco eject",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build"
   },
   "browserslist": [
     ">0.2%",
