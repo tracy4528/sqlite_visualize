@@ -1,105 +1,135 @@
 import React, { useState, useEffect } from "react";
 import "./styles.css";
 import initSqlJs from "sql.js";
-
-// Required to let webpack 4 know it needs to copy the wasm file to our assets
 import sqlWasm from "!!file-loader?name=sql-wasm-[contenthash].wasm!sql.js/dist/sql-wasm.wasm";
 
 export default function App() {
   const [db, setDb] = useState(null);
   const [error, setError] = useState(null);
+  const [query, setQuery] = useState("SELECT * FROM Album;");
 
-  useEffect(async () => {    
-    // sql.js needs to fetch its wasm file, so we cannot immediately instantiate the database
-    // without any configuration, initSqlJs will fetch the wasm files directly from the same path as the js
-    // see ../craco.config.js
-    const wasmFileLocation = () => sqlWasm;
-    const SQL = await initSqlJs({ locateFile: wasmFileLocation });
+  useEffect(() => {
+    const loadDatabase = async () => {
+      try {
+        const wasmFileLocation = () => sqlWasm;
+        const SQL = await initSqlJs({ locateFile: wasmFileLocation });
 
-    // Load .db file
-    const response = await fetch('./Chinook_Sqlite_rev.sqlite');
-    const buffer = await response.arrayBuffer();
-    const dbInstance = new SQL.Database(new Uint8Array(buffer));
-    
-    // Set the database instance to state
-    setDb(dbInstance);
+        const response = await fetch(`${process.env.PUBLIC_URL}/Chinook_Sqlite_rev.sqlite`);
+        if (!response.ok) throw new Error("Network response was not ok");
+
+        const buffer = await response.arrayBuffer();
+        const dbInstance = new SQL.Database(new Uint8Array(buffer));
+
+        setDb(dbInstance);
+      } catch (err) {
+        setError(err);
+      }
+    };
+
+    loadDatabase();
   }, []);
 
   if (error) return <pre>{error.toString()}</pre>;
   else if (!db) return <pre>Loading...</pre>;
-  else return <SQLRepl db={db} />;
+  else return <SQLRepl db={db} query={query} setQuery={setQuery} />;
 }
 
-/**
- * A simple SQL read-eval-print-loop
- * @param {{db: import("sql.js").Database}} props
- */
-function SQLRepl({ db }) {
+function SQLRepl({ db, query, setQuery }) {
   const [error, setError] = useState(null);
   const [results, setResults] = useState([]);
 
+  useEffect(() => {
+    exec(query);
+  }, [query]);
+
   function exec(sql) {
     try {
-      // The sql is executed synchronously on the UI thread.
-      // You may want to use a web worker here instead
-      setResults(db.exec(sql)); // an array of objects is returned
+      setResults(db.exec(sql));
       setError(null);
     } catch (err) {
-      // exec throws an error when the SQL statement is invalid
       setError(err);
       setResults([]);
     }
   }
 
+  function handleSearchChange(event) {
+    const keyword = event.target.value;
+    if (keyword) {
+      setQuery(`SELECT * FROM Album WHERE Title LIKE '%${keyword}%';`);
+    } else {
+      setQuery("SELECT * FROM Album;");
+    }
+  }
+
   return (
     <div className="App">
-      <h1>React SQL interpreter</h1>
+      <h1>SQLite visualize</h1>
+      <input
+        type="text"
+        placeholder="Search by title"
+        onChange={handleSearchChange}
+      />
 
-      <textarea
-        onChange={(e) => exec(e.target.value)}
-        placeholder="Enter some SQL. No inspiration ? Try “select sqlite_version()”"
-      ></textarea>
 
       <pre className="error">{(error || "").toString()}</pre>
 
       <pre>
-        {
-          // results contains one object per select statement in the query
-          results.map(({ columns, values }, i) => (
-            <ResultsTable key={i} columns={columns} values={values} />
-          ))
-        }
+        {results.map(({ columns, values }, i) => (
+          <ResultsTable key={i} columns={columns} values={values} />
+        ))}
       </pre>
     </div>
   );
 }
 
-/**
- * Renders a single value of the array returned by db.exec(...) as a table
- * @param {import("sql.js").QueryExecResult} props
- */
 function ResultsTable({ columns, values }) {
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
+
+  const sortedValues = React.useMemo(() => {
+    let sortableValues = [...values];
+    if (sortConfig.key !== null) {
+      sortableValues.sort((a, b) => {
+        if (a[sortConfig.key] < b[sortConfig.key]) {
+          return sortConfig.direction === 'ascending' ? -1 : 1;
+        }
+        if (a[sortConfig.key] > b[sortConfig.key]) {
+          return sortConfig.direction === 'ascending' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return sortableValues;
+  }, [values, sortConfig]);
+
+  const requestSort = key => {
+    let direction = 'ascending';
+    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
+
   return (
     <table>
       <thead>
         <tr>
           {columns.map((columnName, i) => (
-            <td key={i}>{columnName}</td>
+            <th key={i} onClick={() => requestSort(i)}>
+              {columnName}
+              {sortConfig.key === i ? (sortConfig.direction === 'ascending' ? ' 🔼' : ' 🔽') : null}
+            </th>
           ))}
         </tr>
       </thead>
 
       <tbody>
-        {
-          // values is an array of arrays representing the results of the query
-          values.map((row, i) => (
-            <tr key={i}>
-              {row.map((value, i) => (
-                <td key={i}>{value}</td>
-              ))}
-            </tr>
-          ))
-        }
+        {sortedValues.map((row, i) => (
+          <tr key={i}>
+            {row.map((value, i) => (
+              <td key={i}>{value}</td>
+            ))}
+          </tr>
+        ))}
       </tbody>
     </table>
   );
