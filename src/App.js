@@ -7,6 +7,7 @@ export default function App() {
   const [db, setDb] = useState(null);
   const [error, setError] = useState(null);
   const [query, setQuery] = useState("SELECT * FROM Album;");
+  const [tables, setTables] = useState([]);
 
   useEffect(() => {
     const loadDatabase = async () => {
@@ -21,6 +22,7 @@ export default function App() {
         const dbInstance = new SQL.Database(new Uint8Array(buffer));
 
         setDb(dbInstance);
+        fetchTables(dbInstance);
       } catch (err) {
         setError(err);
       }
@@ -29,12 +31,17 @@ export default function App() {
     loadDatabase();
   }, []);
 
+  const fetchTables = (dbInstance) => {
+    const res = dbInstance.exec("SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view');");
+    setTables(res[0].values.map(row => ({ name: row[0], type: row[1] })));
+  };
+
   if (error) return <pre>{error.toString()}</pre>;
   else if (!db) return <pre>Loading...</pre>;
-  else return <SQLRepl db={db} query={query} setQuery={setQuery} />;
+  else return <SQLRepl db={db} query={query} setQuery={setQuery} tables={tables} />;
 }
 
-function SQLRepl({ db, query, setQuery }) {
+function SQLRepl({ db, query, setQuery, tables }) {
   const [error, setError] = useState(null);
   const [results, setResults] = useState([]);
 
@@ -61,15 +68,25 @@ function SQLRepl({ db, query, setQuery }) {
     }
   }
 
+  function handleTableChange(event) {
+    const selectedTable = event.target.value;
+    if (selectedTable) {
+      setQuery(`SELECT * FROM ${selectedTable};`);
+    }
+  }
+
   return (
     <div className="App">
       <h1>SQLite visualize</h1>
-      <input
-        type="text"
-        placeholder="Search by title"
-        onChange={handleSearchChange}
-      />
 
+      <select onChange={handleTableChange}>
+        <option value="">Select a table or view</option>
+        {tables.map((table, i) => (
+          <option key={i} value={table.name}>
+            {table.name} ({table.type})
+          </option>
+        ))}
+      </select>
 
       <pre className="error">{(error || "").toString()}</pre>
 
