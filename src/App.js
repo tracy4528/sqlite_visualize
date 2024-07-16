@@ -8,6 +8,7 @@ export default function App() {
   const [error, setError] = useState(null);
   const [query, setQuery] = useState("SELECT * FROM Album;");
   const [tables, setTables] = useState([]);
+  const [searchTerms, setSearchTerms] = useState({});
 
   useEffect(() => {
     const loadDatabase = async () => {
@@ -38,10 +39,10 @@ export default function App() {
 
   if (error) return <pre>{error.toString()}</pre>;
   else if (!db) return <pre>Loading...</pre>;
-  else return <SQLRepl db={db} query={query} setQuery={setQuery} tables={tables} />;
+  else return <SQLRepl db={db} query={query} setQuery={setQuery} tables={tables} searchTerms={searchTerms} setSearchTerms={setSearchTerms} />;
 }
 
-function SQLRepl({ db, query, setQuery, tables }) {
+function SQLRepl({ db, query, setQuery, tables, searchTerms, setSearchTerms }) {
   const [error, setError] = useState(null);
   const [results, setResults] = useState([]);
 
@@ -59,20 +60,22 @@ function SQLRepl({ db, query, setQuery, tables }) {
     }
   }
 
-  function handleSearchChange(event) {
-    const keyword = event.target.value;
-    if (keyword) {
-      setQuery(`SELECT * FROM Album WHERE Title LIKE '%${keyword}%';`);
-    } else {
-      setQuery("SELECT * FROM Album;");
-    }
-  }
-
   function handleTableChange(event) {
     const selectedTable = event.target.value;
     if (selectedTable) {
       setQuery(`SELECT * FROM ${selectedTable};`);
+      setSearchTerms({});
     }
+  }
+
+  function handleSearchChange(column, event) {
+    const newSearchTerms = { ...searchTerms, [column]: event.target.value };
+    setSearchTerms(newSearchTerms);
+    const searchConditions = Object.entries(newSearchTerms)
+      .filter(([, value]) => value)
+      .map(([col, val]) => `${col} LIKE '%${val}%'`)
+      .join(" AND ");
+    setQuery(`SELECT * FROM Album${searchConditions ? ` WHERE ${searchConditions}` : ''};`);
   }
 
   return (
@@ -92,14 +95,14 @@ function SQLRepl({ db, query, setQuery, tables }) {
 
       <pre>
         {results.map(({ columns, values }, i) => (
-          <ResultsTable key={i} columns={columns} values={values} />
+          <ResultsTable key={i} columns={columns} values={values} searchTerms={searchTerms} handleSearchChange={handleSearchChange} />
         ))}
       </pre>
     </div>
   );
 }
 
-function ResultsTable({ columns, values }) {
+function ResultsTable({ columns, values, searchTerms, handleSearchChange }) {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
 
   const sortedValues = React.useMemo(() => {
@@ -127,27 +130,35 @@ function ResultsTable({ columns, values }) {
   };
 
   return (
-    <table>
-      <thead>
-        <tr>
-          {columns.map((columnName, i) => (
-            <th key={i} onClick={() => requestSort(i)}>
-              {columnName}
-              {sortConfig.key === i ? (sortConfig.direction === 'ascending' ? ' 🔼' : ' 🔽') : null}
-            </th>
-          ))}
-        </tr>
-      </thead>
-
-      <tbody>
-        {sortedValues.map((row, i) => (
-          <tr key={i}>
-            {row.map((value, i) => (
-              <td key={i}>{value}</td>
+    <div>
+      <table>
+        <thead>
+          <tr>
+            {columns.map((columnName, i) => (
+              <th key={i} onClick={() => requestSort(i)}>
+                {columnName}
+                {sortConfig.key === i ? (sortConfig.direction === 'ascending' ? ' 🔼' : ' 🔽') : null}
+                <input
+                  type="text"
+                  value={searchTerms[columnName] || ''}
+                  onChange={(event) => handleSearchChange(columnName, event)}
+                  placeholder={`Search ${columnName}`}
+                />
+              </th>
             ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+
+        <tbody>
+          {sortedValues.map((row, i) => (
+            <tr key={i}>
+              {row.map((value, i) => (
+                <td key={i}>{value}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
