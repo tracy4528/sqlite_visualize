@@ -5,50 +5,120 @@ import sqlWasm from "!!file-loader?name=sql-wasm-[contenthash].wasm!sql.js/dist/
 
 export default function App() {
   const [db, setDb] = useState(null);
+  const [SQL, setSQL] = useState(null);
   const [error, setError] = useState(null);
-  const [query, setQuery] = useState("SELECT * FROM Album;");
+  const [query, setQuery] = useState("");
   const [tables, setTables] = useState([]);
   const [searchTerms, setSearchTerms] = useState({});
+  const [currentFileName, setCurrentFileName] = useState("");
+  const [selectedTable, setSelectedTable] = useState("");
 
   useEffect(() => {
-    const loadDatabase = async () => {
+    initSqlJs({ locateFile: () => sqlWasm })
+      .then(SQL => {
+        setSQL(SQL);
+        setDb(new SQL.Database());
+      })
+      .catch(err => setError(err));
+  }, []);
+
+  const loadDatabase = async (arrayBuffer, fileName) => {
+    if (!SQL) {
+      setError(new Error("SQL.js is not initialized"));
+      return;
+    }
+
+    try {
+      const newDb = new SQL.Database(new Uint8Array(arrayBuffer));
+      setDb(newDb);
+      setCurrentFileName(fileName);
+      fetchTables(newDb);
+      setSelectedTable("");
+      setSearchTerms({});
+    } catch (err) {
+      setError(err);
+    }
+  };
+
+  const fetchTables = (dbInstance) => {
+    try {
+      const res = dbInstance.exec("SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view');");
+      if (res[0] && res[0].values) {
+        setTables(res[0].values.map(row => ({ name: row[0], type: row[1] })));
+      } else {
+        setTables([]);
+      }
+    } catch (err) {
+      setError(err);
+    }
+  };
+
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => loadDatabase(e.target.result, file.name);
+      reader.onerror = (e) => setError(e.target.error);
+      reader.readAsArrayBuffer(file);
+    }
+  };
+
+  const exportDatabase = () => {
+    if (db) {
       try {
-        const wasmFileLocation = () => sqlWasm;
-        const SQL = await initSqlJs({ locateFile: wasmFileLocation });
-
-        const response = await fetch(`${process.env.PUBLIC_URL}/Chinook_Sqlite_rev.sqlite`);
-        if (!response.ok) throw new Error("Network response was not ok");
-
-        const buffer = await response.arrayBuffer();
-        const dbInstance = new SQL.Database(new Uint8Array(buffer));
-
-        setDb(dbInstance);
-        fetchTables(dbInstance);
+        const data = db.export();
+        const blob = new Blob([data], { type: "application/x-sqlite3" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = currentFileName || "database.sqlite";
+        a.click();
+        URL.revokeObjectURL(url);
       } catch (err) {
         setError(err);
       }
-    };
-
-    loadDatabase();
-  }, []);
-
-  const fetchTables = (dbInstance) => {
-    const res = dbInstance.exec("SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view');");
-    setTables(res[0].values.map(row => ({ name: row[0], type: row[1] })));
+    }
   };
 
   if (error) return <pre>{error.toString()}</pre>;
-  else if (!db) return <pre>Loading...</pre>;
-  else return <SQLRepl db={db} query={query} setQuery={setQuery} tables={tables} searchTerms={searchTerms} setSearchTerms={setSearchTerms} />;
+  if (!SQL || !db) return <pre>Loading...</pre>;
+
+  return (
+    <div className="App">
+      <h1>SQLite visualize</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <div>
+          <input type="file" onChange={handleFileUpload} accept=".sqlite,.db,.sqlite3" />
+          <button onClick={exportDatabase}>Export Database</button>
+        </div>
+        <div>
+          <strong>Current File: </strong>{currentFileName || "No file loaded"}
+        </div>
+      </div>
+      <SQLRepl 
+        db={db} 
+        query={query} 
+        setQuery={setQuery} 
+        tables={tables} 
+        searchTerms={searchTerms} 
+        setSearchTerms={setSearchTerms}
+        selectedTable={selectedTable}
+        setSelectedTable={setSelectedTable}
+      />
+    </div>
+  );
 }
 
-function SQLRepl({ db, query, setQuery, tables, searchTerms, setSearchTerms }) {
+
+function SQLRepl({ db, query, setQuery, tables, searchTerms, setSearchTerms, selectedTable, setSelectedTable }) {
   const [error, setError] = useState(null);
   const [results, setResults] = useState([]);
 
   useEffect(() => {
-    exec(query);
-  }, [query]);
+    if (selectedTable) {
+      exec(`SELECT * FROM ${selectedTable};`);
+    }
+  }, [selectedTable]);
 
   function exec(sql) {
     try {
@@ -61,11 +131,9 @@ function SQLRepl({ db, query, setQuery, tables, searchTerms, setSearchTerms }) {
   }
 
   function handleTableChange(event) {
-    const selectedTable = event.target.value;
-    if (selectedTable) {
-      setQuery(`SELECT * FROM ${selectedTable};`);
-      setSearchTerms({});
-    }
+    const newSelectedTable = event.target.value;
+    setSelectedTable(newSelectedTable);
+    setSearchTerms({});
   }
 
   function handleSearchChange(column, event) {
@@ -75,14 +143,21 @@ function SQLRepl({ db, query, setQuery, tables, searchTerms, setSearchTerms }) {
       .filter(([, value]) => value)
       .map(([col, val]) => `${col} LIKE '%${val}%'`)
       .join(" AND ");
-    setQuery(`SELECT * FROM Album${searchConditions ? ` WHERE ${searchConditions}` : ''};`);
+    const newQuery = `SELECT * FROM ${selectedTable}${searchConditions ? ` WHERE ${searchConditions}` : ''};`;
+    setQuery(newQuery);
+    exec(newQuery);
+  }
+
+  function clearSearch() {
+    setSearchTerms({});
+    const newQuery = `SELECT * FROM ${selectedTable};`;
+    setQuery(newQuery);
+    exec(newQuery);
   }
 
   return (
-    <div className="App">
-      <h1>SQLite visualize</h1>
-
-      <select onChange={handleTableChange}>
+    <div>
+      <select onChange={handleTableChange} value={selectedTable}>
         <option value="">Select a table or view</option>
         {tables.map((table, i) => (
           <option key={i} value={table.name}>
@@ -91,13 +166,19 @@ function SQLRepl({ db, query, setQuery, tables, searchTerms, setSearchTerms }) {
         ))}
       </select>
 
+      {selectedTable && <button onClick={clearSearch}>Clear Search</button>}
+
       <pre className="error">{(error || "").toString()}</pre>
 
-      <pre>
-        {results.map(({ columns, values }, i) => (
-          <ResultsTable key={i} columns={columns} values={values} searchTerms={searchTerms} handleSearchChange={handleSearchChange} />
-        ))}
-      </pre>
+      {results.map(({ columns, values }, i) => (
+        <ResultsTable 
+          key={i} 
+          columns={columns} 
+          values={values} 
+          searchTerms={searchTerms} 
+          handleSearchChange={handleSearchChange} 
+        />
+      ))}
     </div>
   );
 }
@@ -148,7 +229,6 @@ function ResultsTable({ columns, values, searchTerms, handleSearchChange }) {
             ))}
           </tr>
         </thead>
-
         <tbody>
           {sortedValues.map((row, i) => (
             <tr key={i}>
