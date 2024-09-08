@@ -6,6 +6,12 @@ SQLite Visualizer is a React-based web application that allows users to upload, 
 [demo](https://tracy4528.github.io/sqlite_visualize/)
 
 
+## Features
+- Simple drag-and-drop interface for uploading SQLite database files (.sqlite, .db, or .sqlite3)
+- Quick browsing of tables and views within the database
+- User-friendly data filtering without SQL knowledge
+
+
 ## Installation
 
 Ensure you have Node.js and npm installed. Then, follow these steps:
@@ -33,13 +39,13 @@ This will start the development server at http://localhost:3000.
 
 ## Building
 
-To build the production version of the application:
+To deploy the application to GitHub Pages:
 
 ```
-npm run build
+npm run deploy
 ```
 
-This creates an optimized production build in the `build` directory.
+This command will build the application and deploy it to the 'gh-pages' branch of your GitHub repository, making it accessible via GitHub Pages.
 
 ## Usage
 
