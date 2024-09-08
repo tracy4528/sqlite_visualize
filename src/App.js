@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from 'react';
 import "./styles.css";
 import initSqlJs from "sql.js";
 import sqlWasm from "!!file-loader?name=sql-wasm-[contenthash].wasm!sql.js/dist/sql-wasm.wasm";
@@ -185,6 +185,17 @@ function SQLRepl({ db, query, setQuery, tables, searchTerms, setSearchTerms, sel
 
 function ResultsTable({ columns, values, searchTerms, handleSearchChange }) {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
+  const [columnWidths, setColumnWidths] = useState({});
+  const [resizing, setResizing] = useState(null);
+  const tableRef = useRef(null);
+
+  useEffect(() => {
+    const initialWidths = {};
+    columns.forEach((col, index) => {
+      initialWidths[index] = 150; // 設置初始寬度為150px
+    });
+    setColumnWidths(initialWidths);
+  }, [columns]);
 
   const sortedValues = React.useMemo(() => {
     let sortableValues = [...values];
@@ -210,20 +221,62 @@ function ResultsTable({ columns, values, searchTerms, handleSearchChange }) {
     setSortConfig({ key, direction });
   };
 
+  const handleMouseDown = (index, e) => {
+    setResizing(index);
+    e.preventDefault();
+  };
+
+  const handleMouseMove = (e) => {
+    if (resizing !== null) {
+      const newWidth = e.clientX - tableRef.current.getBoundingClientRect().left;
+      setColumnWidths(prev => ({
+        ...prev,
+        [resizing]: Math.max(50, newWidth) 
+      }));
+    }
+  };
+
+  const handleMouseUp = () => {
+    setResizing(null);
+  };
+
+  useEffect(() => {
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [resizing]);
+
   return (
-    <div>
-      <table>
+    <div style={{ overflowX: 'auto' }}>
+      <table ref={tableRef} style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
         <thead>
           <tr>
             {columns.map((columnName, i) => (
-              <th key={i} onClick={() => requestSort(i)}>
-                {columnName}
-                {sortConfig.key === i ? (sortConfig.direction === 'ascending' ? ' 🔼' : ' 🔽') : null}
+              <th key={i} style={{ position: 'relative', width: columnWidths[i] }}>
+                <div onClick={() => requestSort(i)}>
+                  {columnName}
+                  {sortConfig.key === i ? (sortConfig.direction === 'ascending' ? ' 🔼' : ' 🔽') : null}
+                </div>
                 <input
                   type="text"
                   value={searchTerms[columnName] || ''}
                   onChange={(event) => handleSearchChange(columnName, event)}
                   placeholder={`Search ${columnName}`}
+                  style={{ width: '100%' }}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    right: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: '5px',
+                    cursor: 'col-resize'
+                  }}
+                  onMouseDown={(e) => handleMouseDown(i, e)}
                 />
               </th>
             ))}
@@ -232,8 +285,10 @@ function ResultsTable({ columns, values, searchTerms, handleSearchChange }) {
         <tbody>
           {sortedValues.map((row, i) => (
             <tr key={i}>
-              {row.map((value, i) => (
-                <td key={i}>{value}</td>
+              {row.map((value, j) => (
+                <td key={j} style={{ width: columnWidths[j], maxWidth: columnWidths[j], overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {value}
+                </td>
               ))}
             </tr>
           ))}
@@ -242,3 +297,4 @@ function ResultsTable({ columns, values, searchTerms, handleSearchChange }) {
     </div>
   );
 }
+
